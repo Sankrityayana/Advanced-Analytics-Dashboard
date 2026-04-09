@@ -57,6 +57,41 @@ MODEL_CACHE: dict[str, Any] = {}
 ANALYTICS_CACHE: dict[str, Any] | None = None
 FORECAST_CACHE: dict[str, Any] | None = None
 ARTIFACT_LOCK = threading.Lock()
+ARTIFACT_STATUS: dict[str, Any] = {
+    "state": "not_initialized",
+    "ready": False,
+    "last_error": None,
+    "updated_at": None,
+}
+
+
+def _set_artifact_status(state: str, ready: bool, last_error: str | None = None) -> None:
+    ARTIFACT_STATUS.update(
+        {
+            "state": state,
+            "ready": ready,
+            "last_error": last_error,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+    )
+
+
+def get_readiness_status() -> dict[str, Any]:
+    model_files_ready = all(model_path.exists() for model_path in MODEL_FILE_MAP.values())
+    cache_files_ready = ANALYTICS_PATH.exists() and FORECAST_PATH.exists()
+    computed_ready = bool(model_files_ready and cache_files_ready)
+
+    return {
+        "state": ARTIFACT_STATUS["state"],
+        "ready": bool(ARTIFACT_STATUS["ready"] and computed_ready),
+        "last_error": ARTIFACT_STATUS["last_error"],
+        "updated_at": ARTIFACT_STATUS["updated_at"],
+        "artifacts": {
+            "model_files_ready": model_files_ready,
+            "cache_files_ready": cache_files_ready,
+            "dataset_ready": DATASET_PATH.exists(),
+        },
+    }
 
 
 def _sigmoid(values: np.ndarray) -> np.ndarray:
@@ -426,62 +461,75 @@ def ensure_artifacts(force_retrain: bool = False) -> None:
     global ANALYTICS_CACHE, FORECAST_CACHE, MODEL_CACHE
 
     with ARTIFACT_LOCK:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            _set_artifact_status("initializing", False)
 
-        frame = load_or_create_dataset()
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-        models_missing = force_retrain or any(not model_path.exists() for model_path in MODEL_FILE_MAP.values())
-        analytics_missing = force_retrain or not ANALYTICS_PATH.exists()
-        forecast_missing = force_retrain or not FORECAST_PATH.exists()
+            frame = load_or_create_dataset()
 
-        if models_missing:
-            MODEL_CACHE = {}
-            model_metrics, feature_importance = train_models(frame)
-        else:
-            model_metrics = {}
-            feature_importance = {}
+            models_missing = force_retrain or any(not model_path.exists() for model_path in MODEL_FILE_MAP.values())
+            analytics_missing = force_retrain or not ANALYTICS_PATH.exists()
+            forecast_missing = force_retrain or not FORECAST_PATH.exists()
 
-        if analytics_missing or models_missing:
-            if not model_metrics:
-                loaded_models = {name: joblib.load(path) for name, path in MODEL_FILE_MAP.items()}
-                sample_x = frame[FEATURE_COLUMNS]
-                sample_y = frame["clicked"]
+            if models_missing:
+                MODEL_CACHE = {}
+                model_metrics, feature_importance = train_models(frame)
+            else:
                 model_metrics = {}
                 feature_importance = {}
-                for name, model in loaded_models.items():
-                    probabilities = model.predict_proba(sample_x)[:, 1]
-                    predictions = (probabilities >= 0.5).astype(int)
-                    model_metrics[name] = {
-                        "accuracy": round(float(accuracy_score(sample_y, predictions)), 4),
-                        "precision": round(float(precision_score(sample_y, predictions, zero_division=0)), 4),
-                        "recall": round(float(recall_score(sample_y, predictions, zero_division=0)), 4),
-                        "f1": round(float(f1_score(sample_y, predictions, zero_division=0)), 4),
-                        "roc_auc": round(float(roc_auc_score(sample_y, probabilities)), 4),
-                    }
-                    importance_values = _extract_importance(model)
-                    total_importance = float(importance_values.sum())
-                    normalized = importance_values / total_importance if total_importance > 0 else importance_values
-                    feature_importance[name] = [
-                        {
-                            "feature": feature,
-                            "importance": round(float(weight), 4),
+
+            if analytics_missing or models_missing:
+                if not model_metrics:
+                    loaded_models = {name: joblib.load(path) for name, path in MODEL_FILE_MAP.items()}
+                    _, sample_x, _, sample_y = train_test_split(
+                        frame[FEATURE_COLUMNS],
+                        frame["clicked"],
+                        test_size=0.2,
+                        random_state=42,
+                        stratify=frame["clicked"],
+                    )
+                    model_metrics = {}
+                    feature_importance = {}
+                    for name, model in loaded_models.items():
+                        probabilities = model.predict_proba(sample_x)[:, 1]
+                        predictions = (probabilities >= 0.5).astype(int)
+                        model_metrics[name] = {
+                            "accuracy": round(float(accuracy_score(sample_y, predictions)), 4),
+                            "precision": round(float(precision_score(sample_y, predictions, zero_division=0)), 4),
+                            "recall": round(float(recall_score(sample_y, predictions, zero_division=0)), 4),
+                            "f1": round(float(f1_score(sample_y, predictions, zero_division=0)), 4),
+                            "roc_auc": round(float(roc_auc_score(sample_y, probabilities)), 4),
                         }
-                        for feature, weight in sorted(
-                            zip(FEATURE_COLUMNS, normalized, strict=False),
-                            key=lambda item: item[1],
-                            reverse=True,
-                        )
-                    ]
+                        importance_values = _extract_importance(model)
+                        total_importance = float(importance_values.sum())
+                        normalized = importance_values / total_importance if total_importance > 0 else importance_values
+                        feature_importance[name] = [
+                            {
+                                "feature": feature,
+                                "importance": round(float(weight), 4),
+                            }
+                            for feature, weight in sorted(
+                                zip(FEATURE_COLUMNS, normalized, strict=False),
+                                key=lambda item: item[1],
+                                reverse=True,
+                            )
+                        ]
 
-            analytics = build_analytics_cache(frame, model_metrics, feature_importance)
-            _write_json(ANALYTICS_PATH, analytics)
-            ANALYTICS_CACHE = analytics
+                analytics = build_analytics_cache(frame, model_metrics, feature_importance)
+                _write_json(ANALYTICS_PATH, analytics)
+                ANALYTICS_CACHE = analytics
 
-        if forecast_missing or models_missing:
-            forecast = build_forecast(frame)
-            _write_json(FORECAST_PATH, forecast)
-            FORECAST_CACHE = forecast
+            if forecast_missing or models_missing:
+                forecast = build_forecast(frame)
+                _write_json(FORECAST_PATH, forecast)
+                FORECAST_CACHE = forecast
+
+            _set_artifact_status("ready", True)
+        except Exception as exc:
+            _set_artifact_status("error", False, str(exc))
+            raise
 
 
 def load_models() -> dict[str, Any]:

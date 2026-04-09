@@ -69,6 +69,10 @@ Advanced-Analytics-Dashboard/
 - `GET /metrics`
   - Output: KPI summary, trend series, feature insights, heatmap, segment data
 
+- `GET /ready`
+  - Output: artifact readiness state for models and cache files
+  - Status: `200` when ready, `503` while warming or on initialization error
+
 ## Setup Instructions
 
 ### 1. Clone and enter project
@@ -107,6 +111,10 @@ uvicorn main:app --reload
 
 Backend default URL: `http://127.0.0.1:8000`
 
+Optional backend configuration:
+
+- `CORS_ORIGINS`: comma-separated allowed origins (example: `https://app.example.com,https://admin.example.com`)
+
 ### Frontend
 
 Run this from the `frontend` directory:
@@ -121,6 +129,14 @@ If needed, set frontend API base URL in `frontend/.env`:
 
 ```bash
 VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+## Automated Tests
+
+Run backend tests from the project root:
+
+```bash
+python -m unittest discover -s backend/tests
 ```
 
 ## Screenshots

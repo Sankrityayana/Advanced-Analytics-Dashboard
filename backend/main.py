@@ -1,10 +1,24 @@
+import os
 from threading import Thread
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.schemas import PredictRequest
-from app.services import ensure_artifacts, get_forecast, get_metrics, predict_click_probability
+from app.services import (
+    ensure_artifacts,
+    get_forecast,
+    get_metrics,
+    get_readiness_status,
+    predict_click_probability,
+)
+
+
+def _load_cors_origins() -> list[str]:
+    raw_value = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+    origins = [origin.strip() for origin in raw_value.split(",") if origin.strip()]
+    return origins or ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 
 app = FastAPI(
@@ -15,10 +29,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_load_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,6 +45,13 @@ def on_startup() -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready() -> JSONResponse:
+    readiness = get_readiness_status()
+    status_code = 200 if readiness["ready"] else 503
+    return JSONResponse(content=readiness, status_code=status_code)
 
 
 @app.post("/predict")
