@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Generated artifacts
+models/*.joblib
+models/*.json
+data/ads_ctr_dashboard.csv

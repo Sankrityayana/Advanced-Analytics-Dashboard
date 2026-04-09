@@ -1,0 +1,127 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 8% 18%, rgba(34, 123, 121, 0.34) 0%, rgba(34, 123, 121, 0) 42%),
+    radial-gradient(circle at 88% 12%, rgba(255, 179, 86, 0.22) 0%, rgba(255, 179, 86, 0) 45%),
+    linear-gradient(160deg, #070d12 0%, #0b141c 52%, #132231 100%);
+  color: #ddebf6;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.metric-value {
+  font-family: "IBM Plex Mono", "Consolas", monospace;
+}
+
+.glass-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  background: linear-gradient(165deg, rgba(16, 29, 40, 0.88), rgba(10, 18, 26, 0.75));
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.nav-link {
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  color: #dbe8f3;
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+  border-color: rgba(36, 209, 206, 0.45);
+  background: rgba(36, 209, 206, 0.1);
+}
+
+.nav-link-active {
+  border-color: rgba(36, 209, 206, 0.65);
+  background: linear-gradient(135deg, rgba(36, 209, 206, 0.2), rgba(36, 209, 206, 0.05));
+}
+
+.page-enter {
+  animation: fade-rise 0.46s ease both;
+}
+
+.atmosphere-orb {
+  animation: drift 16s ease-in-out infinite;
+}
+
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, 12px, 0) scale(1.04);
+  }
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.07);
+}
+
+.recharts-default-tooltip {
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 0.75rem !important;
+  background: rgba(7, 15, 22, 0.96) !important;
+}
+
+.recharts-tooltip-item,
+.recharts-tooltip-label {
+  color: #d8e8f5 !important;
+}
+
+input[type="range"] {
+  accent-color: #24d1ce;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 149, 174, 0.45);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(147, 179, 206, 0.55);
+}
