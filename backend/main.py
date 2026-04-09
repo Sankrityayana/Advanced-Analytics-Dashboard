@@ -1,3 +1,5 @@
+from threading import Thread
+
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -25,7 +27,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup() -> None:
-    ensure_artifacts()
+    # Warm startup artifacts without blocking API boot.
+    Thread(target=ensure_artifacts, daemon=True).start()
 
 
 @app.get("/health")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,7 @@ MODEL_FILE_MAP = {
 MODEL_CACHE: dict[str, Any] = {}
 ANALYTICS_CACHE: dict[str, Any] | None = None
 FORECAST_CACHE: dict[str, Any] | None = None
+ARTIFACT_LOCK = threading.Lock()
 
 
 def _sigmoid(values: np.ndarray) -> np.ndarray:
@@ -421,63 +423,65 @@ def build_analytics_cache(
 
 
 def ensure_artifacts(force_retrain: bool = False) -> None:
-    global ANALYTICS_CACHE, FORECAST_CACHE
+    global ANALYTICS_CACHE, FORECAST_CACHE, MODEL_CACHE
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    with ARTIFACT_LOCK:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-    frame = load_or_create_dataset()
+        frame = load_or_create_dataset()
 
-    models_missing = force_retrain or any(not model_path.exists() for model_path in MODEL_FILE_MAP.values())
-    analytics_missing = force_retrain or not ANALYTICS_PATH.exists()
-    forecast_missing = force_retrain or not FORECAST_PATH.exists()
+        models_missing = force_retrain or any(not model_path.exists() for model_path in MODEL_FILE_MAP.values())
+        analytics_missing = force_retrain or not ANALYTICS_PATH.exists()
+        forecast_missing = force_retrain or not FORECAST_PATH.exists()
 
-    if models_missing:
-        model_metrics, feature_importance = train_models(frame)
-    else:
-        model_metrics = {}
-        feature_importance = {}
-
-    if analytics_missing or models_missing:
-        if not model_metrics:
-            loaded_models = {name: joblib.load(path) for name, path in MODEL_FILE_MAP.items()}
-            sample_x = frame[FEATURE_COLUMNS]
-            sample_y = frame["clicked"]
+        if models_missing:
+            MODEL_CACHE = {}
+            model_metrics, feature_importance = train_models(frame)
+        else:
             model_metrics = {}
             feature_importance = {}
-            for name, model in loaded_models.items():
-                probabilities = model.predict_proba(sample_x)[:, 1]
-                predictions = (probabilities >= 0.5).astype(int)
-                model_metrics[name] = {
-                    "accuracy": round(float(accuracy_score(sample_y, predictions)), 4),
-                    "precision": round(float(precision_score(sample_y, predictions, zero_division=0)), 4),
-                    "recall": round(float(recall_score(sample_y, predictions, zero_division=0)), 4),
-                    "f1": round(float(f1_score(sample_y, predictions, zero_division=0)), 4),
-                    "roc_auc": round(float(roc_auc_score(sample_y, probabilities)), 4),
-                }
-                importance_values = _extract_importance(model)
-                total_importance = float(importance_values.sum())
-                normalized = importance_values / total_importance if total_importance > 0 else importance_values
-                feature_importance[name] = [
-                    {
-                        "feature": feature,
-                        "importance": round(float(weight), 4),
+
+        if analytics_missing or models_missing:
+            if not model_metrics:
+                loaded_models = {name: joblib.load(path) for name, path in MODEL_FILE_MAP.items()}
+                sample_x = frame[FEATURE_COLUMNS]
+                sample_y = frame["clicked"]
+                model_metrics = {}
+                feature_importance = {}
+                for name, model in loaded_models.items():
+                    probabilities = model.predict_proba(sample_x)[:, 1]
+                    predictions = (probabilities >= 0.5).astype(int)
+                    model_metrics[name] = {
+                        "accuracy": round(float(accuracy_score(sample_y, predictions)), 4),
+                        "precision": round(float(precision_score(sample_y, predictions, zero_division=0)), 4),
+                        "recall": round(float(recall_score(sample_y, predictions, zero_division=0)), 4),
+                        "f1": round(float(f1_score(sample_y, predictions, zero_division=0)), 4),
+                        "roc_auc": round(float(roc_auc_score(sample_y, probabilities)), 4),
                     }
-                    for feature, weight in sorted(
-                        zip(FEATURE_COLUMNS, normalized, strict=False),
-                        key=lambda item: item[1],
-                        reverse=True,
-                    )
-                ]
+                    importance_values = _extract_importance(model)
+                    total_importance = float(importance_values.sum())
+                    normalized = importance_values / total_importance if total_importance > 0 else importance_values
+                    feature_importance[name] = [
+                        {
+                            "feature": feature,
+                            "importance": round(float(weight), 4),
+                        }
+                        for feature, weight in sorted(
+                            zip(FEATURE_COLUMNS, normalized, strict=False),
+                            key=lambda item: item[1],
+                            reverse=True,
+                        )
+                    ]
 
-        analytics = build_analytics_cache(frame, model_metrics, feature_importance)
-        _write_json(ANALYTICS_PATH, analytics)
-        ANALYTICS_CACHE = analytics
+            analytics = build_analytics_cache(frame, model_metrics, feature_importance)
+            _write_json(ANALYTICS_PATH, analytics)
+            ANALYTICS_CACHE = analytics
 
-    if forecast_missing or models_missing:
-        forecast = build_forecast(frame)
-        _write_json(FORECAST_PATH, forecast)
-        FORECAST_CACHE = forecast
+        if forecast_missing or models_missing:
+            forecast = build_forecast(frame)
+            _write_json(FORECAST_PATH, forecast)
+            FORECAST_CACHE = forecast
 
 
 def load_models() -> dict[str, Any]:

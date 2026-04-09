@@ -18,9 +18,20 @@ function formatDate(value) {
 
 export default function Forecasting() {
   const [days, setDays] = useState(30);
+  const [appliedDays, setAppliedDays] = useState(30);
   const [forecastPayload, setForecastPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAppliedDays(days);
+    }, 320);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [days]);
 
   useEffect(() => {
     let active = true;
@@ -28,7 +39,7 @@ export default function Forecasting() {
     async function loadForecast() {
       try {
         setLoading(true);
-        const payload = await fetchForecast(days);
+        const payload = await fetchForecast(appliedDays);
         if (active) {
           setForecastPayload(payload);
           setError("");
@@ -48,7 +59,7 @@ export default function Forecasting() {
     return () => {
       active = false;
     };
-  }, [days]);
+  }, [appliedDays]);
 
   const historyData = useMemo(
     () =>

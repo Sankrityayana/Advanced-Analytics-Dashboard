@@ -31,6 +31,8 @@ const fieldConfig = [
   { name: "campaign_score", label: "Campaign Score", min: 0, max: 100, step: 1 },
 ];
 
+const fieldMap = Object.fromEntries(fieldConfig.map((field) => [field.name, field]));
+
 const barColors = ["#24d1ce", "#ffb65c", "#7fd85c", "#ff7d7d"];
 
 export default function Predictions() {
@@ -66,9 +68,35 @@ export default function Predictions() {
 
   function handleValueChange(event) {
     const { name, value } = event.target;
+
+    if (name === "model_name") {
+      setPayload((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+      return;
+    }
+
+    if (value.trim() === "") {
+      return;
+    }
+
+    const config = fieldMap[name];
+    let numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return;
+    }
+
+    if (config?.step === 1) {
+      numericValue = Math.round(numericValue);
+    }
+    if (config) {
+      numericValue = Math.max(config.min, Math.min(config.max, numericValue));
+    }
+
     setPayload((prev) => ({
       ...prev,
-      [name]: name === "model_name" ? value : Number(value),
+      [name]: numericValue,
     }));
   }
 
