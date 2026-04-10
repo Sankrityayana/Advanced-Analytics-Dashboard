@@ -139,6 +139,12 @@ Run backend tests from the project root:
 python -m unittest discover -s backend/tests
 ```
 
+Run frontend tests from the `frontend` directory:
+
+```bash
+npm test
+```
+
 ## Screenshots
 
 Add UI screenshots in this section after launching locally.
